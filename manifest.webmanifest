@@ -1,0 +1,15 @@
+{
+  "name": "Bologna & Modena — dagplanner",
+  "short_name": "Bologna",
+  "description": "Interactieve reisplanner voor Bologna & Modena, 4-9 september 2026",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "background_color": "#8C2318",
+  "theme_color": "#8C2318",
+  "lang": "nl",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ]
+}
