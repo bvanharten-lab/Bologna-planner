@@ -188,7 +188,7 @@
 </main>
 
 <div class="toast" id="toast"></div>
-<footer>Buon viaggio! 🍷 <span style="opacity:.5;font-size:.8rem">· app-versie 6</span></footer>
+<footer>Buon viaggio! 🍷 <span style="opacity:.5;font-size:.8rem">· app-versie 7</span></footer>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
@@ -422,6 +422,14 @@ const blogInhoud = document.getElementById("blogInhoud");
 let blogKaart = null;
 const FOTO_CACHE = {};
 
+/* diagnose: logt naar console én naar het ?debug-paneel */
+function flog(id,stap,bericht){
+  const regel = `[${id}] ${stap}: ${bericht}`;
+  console.warn("foto",regel);
+  const p = document.getElementById("fotolog");
+  if(p) p.textContent += regel+"\n";
+}
+
 async function haalFoto(id){
   if(id in FOTO_CACHE) return FOTO_CACHE[id];
   const b = BLOKKEN[id];
@@ -430,13 +438,15 @@ async function haalFoto(id){
   if(b.wiki){
     try{
       const r = await fetch("https://it.wikipedia.org/w/api.php?action=query&format=json&origin=*&redirects=1&prop=pageimages&piprop=thumbnail&pithumbsize=800&titles="+encodeURIComponent(b.wiki));
+      if(!r.ok) flog(id,"actionAPI","HTTP "+r.status);
       const j = await r.json();
       const pages = j.query && j.query.pages;
       if(pages){
         const p = Object.values(pages)[0];
         if(p && p.thumbnail && p.thumbnail.source) url = p.thumbnail.source;
+        else flog(id,"actionAPI","geen thumbnail voor '"+b.wiki+"'");
       }
-    }catch(e){ console.warn("foto actionAPI faalde",id,e); }
+    }catch(e){ flog(id,"actionAPI",String(e)); }
   }
   /* 1b. Zelfde artikel via REST-API als backup */
   if(!url && b.wiki){
@@ -445,13 +455,14 @@ async function haalFoto(id){
       if(r.ok){
         const j = await r.json();
         if(j.thumbnail && j.thumbnail.source) url = j.thumbnail.source;
-      }
-    }catch(e){ console.warn("foto REST faalde",id,e); }
+      }else flog(id,"REST","HTTP "+r.status);
+    }catch(e){ flog(id,"REST",String(e)); }
   }
   /* 2. Geen artikel-foto? Commons-geosearch: foto's gemaakt op deze coördinaten */
   if(!url && b.la){
     try{
       const r = await fetch("https://commons.wikimedia.org/w/api.php?action=query&format=json&origin=*&generator=geosearch&ggscoord="+b.la+"%7C"+b.lo+"&ggsradius=180&ggslimit=8&ggsnamespace=6&prop=imageinfo&iiprop=url%7Cmime&iiurlwidth=800");
+      if(!r.ok) flog(id,"geosearch","HTTP "+r.status);
       const j = await r.json();
       const pages = j.query && j.query.pages;
       if(pages){
@@ -462,9 +473,9 @@ async function haalFoto(id){
         if(kandidaten.length){
           const ii = kandidaten[0].imageinfo[0];
           url = ii.thumburl || ii.url;
-        }
-      }
-    }catch(e){ console.warn("foto geosearch faalde",id,e); }
+        }else flog(id,"geosearch","geen foto's binnen 180 m");
+      }else flog(id,"geosearch","leeg antwoord");
+    }catch(e){ flog(id,"geosearch",String(e)); }
   }
   FOTO_CACHE[id] = url;
   return url;
@@ -490,6 +501,9 @@ function renderBlog(){
   }
   const stats = totKm>0 ? `<span>🚶 totaal ±${totKm.toFixed(1).replace('.',',')} km · ${Math.round(totMin)} min lopen</span>` : "";
 
+  // oude kaart netjes opruimen VOORDAT de container wordt vervangen
+  if(blogKaart){ try{ blogKaart.remove(); }catch(e){} blogKaart=null; }
+
   blogInhoud.innerHTML = `
     <div class="blog-kop">
       <h3>${info.naam}</h3>
@@ -497,6 +511,7 @@ function renderBlog(){
       <p class="verhaal">${info.verhaal}</p>
     </div>
     <div class="blog-stats"><span>📍 ${items.length} stops</span>${stats}</div>
+    ${location.search.includes("debug")?`<pre id="fotolog" style="background:#2B1D16;color:#FBF3E4;font-size:.7rem;padding:.6rem;border-radius:10px;overflow-x:auto;max-height:200px"></pre>`:""}
     <div id="blogKaart"></div>
     ${items.map((it,i)=>{
       const b = BLOKKEN[it.id];
@@ -514,33 +529,38 @@ function renderBlog(){
       </article>`;
     }).join("")}`;
 
-  // kaart
-  if(blogKaart){ blogKaart.remove(); blogKaart=null; }
-  if(typeof L !== "undefined"){
-    blogKaart = L.map("blogKaart",{scrollWheelZoom:false});
-    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{attribution:"&copy; OpenStreetMap",maxZoom:19}).addTo(blogKaart);
-    const punten = items.map(it=>[BLOKKEN[it.id].la,BLOKKEN[it.id].lo]);
-    items.forEach((it,i)=>{
-      L.marker(punten[i],{icon:L.divIcon({className:"",html:`<div class="bmarker">${i+1}</div>`,iconSize:[26,26],iconAnchor:[13,13]})})
-        .addTo(blogKaart).bindPopup(`<b>${it.tijd}</b> ${BLOKKEN[it.id].n}`);
-    });
-    if(punten.length>1) L.polyline(punten,{color:"#8C2318",weight:3,dashArray:"6 8",opacity:.8}).addTo(blogKaart);
-    blogKaart.fitBounds(L.latLngBounds(punten).pad(0.15));
-  }
-
-  // foto's asynchroon laden
+  // foto's EERST starten (mogen nooit sneuvelen door een kaartfout)
   blogInhoud.querySelectorAll(".bstop").forEach(async el=>{
-    const url = await haalFoto(el.dataset.id);
-    if(url){
-      const img = new Image();
-      img.className="foto";
-      img.alt = BLOKKEN[el.dataset.id].n;
-      img.loading="lazy";
-      img.referrerPolicy="no-referrer";
-      img.onload = ()=>{ const slot=el.querySelector(".foto-slot"); if(slot){ slot.innerHTML=""; slot.appendChild(img); } };
-      img.src = url;
-    }
+    try{
+      const url = await haalFoto(el.dataset.id);
+      if(url){
+        const img = new Image();
+        img.className="foto";
+        img.alt = BLOKKEN[el.dataset.id].n;
+        img.referrerPolicy="no-referrer";
+        img.onload = ()=>{ const slot=el.querySelector(".foto-slot"); if(slot){ slot.innerHTML=""; slot.appendChild(img); } };
+        img.onerror = ()=>flog(el.dataset.id,"img","laden mislukt: "+url);
+        img.src = url;
+      }
+    }catch(e){ flog(el.dataset.id,"pipeline",String(e)); }
   });
+
+  // kaart — in try/catch zodat een kaartfout nooit iets anders blokkeert
+  try{
+    if(typeof L !== "undefined"){
+      blogKaart = L.map("blogKaart",{scrollWheelZoom:false});
+      L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{attribution:"&copy; OpenStreetMap",maxZoom:19}).addTo(blogKaart);
+      const punten = items.map(it=>[BLOKKEN[it.id].la,BLOKKEN[it.id].lo]);
+      items.forEach((it,i)=>{
+        L.marker(punten[i],{icon:L.divIcon({className:"",html:`<div class="bmarker">${i+1}</div>`,iconSize:[26,26],iconAnchor:[13,13]})})
+          .addTo(blogKaart).bindPopup(`<b>${it.tijd}</b> ${BLOKKEN[it.id].n}`);
+      });
+      if(punten.length>1) L.polyline(punten,{color:"#8C2318",weight:3,dashArray:"6 8",opacity:.8}).addTo(blogKaart);
+      blogKaart.fitBounds(L.latLngBounds(punten).pad(0.15));
+    }else{
+      flog("-","leaflet","Leaflet niet geladen (unpkg bereikbaar?)");
+    }
+  }catch(e){ flog("-","kaart",String(e)); }
 }
 
 /* ================= INTERACTIE ================= */
