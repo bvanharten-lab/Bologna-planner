@@ -294,12 +294,12 @@ const DAGINFO = [
 ];
 
 const AANBEVOLEN = [
- [["20:50","centrale"],["21:05","airbnb"],["21:45","orsa"],["23:00","duetorri"]],
- [["09:30","maggiore"],["10:00","petronio"],["10:45","archi"],["12:15","quadri"],["12:30","sole"],["14:30","stefano"],["17:30","orologio"],["20:00","serra"]],
- [["08:30","sanluca"],["11:45","rina"],["14:00","margherita"],["18:00","pratello"]],
- [["09:15","albinelli"],["10:30","grande"],["14:30","ferrari"]],
- [["09:30","erbe"],["11:00","finestrella"],["11:30","workshop"],["19:30","colombina"]],
- [["09:00","souvenirs"],["11:45","panino"],["12:30","airbnb"],["13:00","centrale"]]
+ [["20:50","centrale"],["21:05","airbnb"],["21:45","orsa"],["23:00","duetorri"],["23:45","airbnb"]],
+ [["09:15","airbnb"],["09:30","maggiore"],["10:00","petronio"],["10:45","archi"],["12:15","quadri"],["12:30","sole"],["14:30","stefano"],["17:30","orologio"],["20:00","serra"],["22:30","airbnb"]],
+ [["08:15","airbnb"],["08:30","sanluca"],["11:45","rina"],["14:00","margherita"],["18:00","pratello"],["21:30","airbnb"]],
+ [["08:35","airbnb"],["08:45","centrale"],["09:15","albinelli"],["10:30","grande"],["14:30","ferrari"],["18:00","centrale"],["18:10","airbnb"]],
+ [["09:15","airbnb"],["09:30","erbe"],["11:00","finestrella"],["11:30","workshop"],["19:30","colombina"],["22:00","airbnb"]],
+ [["08:45","airbnb"],["09:00","souvenirs"],["11:45","panino"],["12:30","airbnb"],["13:00","centrale"]]
 ];
 
 /* ================= STATE + OPSLAG ================= */
@@ -423,17 +423,41 @@ let blogKaart = null;
 const FOTO_CACHE = {};
 
 async function haalFoto(id){
-  const b = BLOKKEN[id];
-  if(!b.wiki) return null;
   if(id in FOTO_CACHE) return FOTO_CACHE[id];
-  try{
-    const r = await fetch("https://it.wikipedia.org/api/rest_v1/page/summary/"+encodeURIComponent(b.wiki.replace(/ /g,"_")));
-    if(!r.ok) throw 0;
-    const j = await r.json();
-    const url = (j.thumbnail && j.thumbnail.source) ? j.thumbnail.source.replace(/\/\d+px-/,"/640px-") : null;
-    FOTO_CACHE[id] = url;
-    return url;
-  }catch(e){ FOTO_CACHE[id]=null; return null; }
+  const b = BLOKKEN[id];
+  let url = null;
+  /* 1. Wikipedia-hoofdfoto van het artikel (action API met origin=* voor betrouwbare CORS) */
+  if(b.wiki){
+    try{
+      const r = await fetch("https://it.wikipedia.org/w/api.php?action=query&format=json&origin=*&redirects=1&prop=pageimages&piprop=thumbnail&pithumbsize=800&titles="+encodeURIComponent(b.wiki));
+      const j = await r.json();
+      const pages = j.query && j.query.pages;
+      if(pages){
+        const p = Object.values(pages)[0];
+        if(p && p.thumbnail && p.thumbnail.source) url = p.thumbnail.source;
+      }
+    }catch(e){}
+  }
+  /* 2. Geen artikel-foto? Zoek op Wikimedia Commons naar foto's gemaakt op deze plek (geosearch op coördinaten) */
+  if(!url && b.la){
+    try{
+      const r = await fetch("https://commons.wikimedia.org/w/api.php?action=query&format=json&origin=*&generator=geosearch&ggscoord="+b.la+"%7C"+b.lo+"&ggsradius=180&ggslimit=8&ggsnamespace=6&prop=imageinfo&iiprop=url%7Cmime&iiurlwidth=800");
+      const j = await r.json();
+      const pages = j.query && j.query.pages;
+      if(pages){
+        const kandidaten = Object.values(pages).filter(p=>{
+          const ii = p.imageinfo && p.imageinfo[0];
+          return ii && /image\/(jpeg|png)/.test(ii.mime||"") && !/\.(svg|pdf|tif)/i.test(ii.url||"");
+        });
+        if(kandidaten.length){
+          const ii = kandidaten[0].imageinfo[0];
+          url = ii.thumburl || ii.url;
+        }
+      }
+    }catch(e){}
+  }
+  FOTO_CACHE[id] = url;
+  return url;
 }
 
 function renderBlog(){
@@ -502,7 +526,8 @@ function renderBlog(){
       img.className="foto";
       img.alt = BLOKKEN[el.dataset.id].n;
       img.loading="lazy";
-      img.onload = ()=>{ const slot=el.querySelector(".foto-slot"); if(slot) slot.innerHTML="", slot.appendChild(img); };
+      img.referrerPolicy="no-referrer";
+      img.onload = ()=>{ const slot=el.querySelector(".foto-slot"); if(slot){ slot.innerHTML=""; slot.appendChild(img); } };
       img.src = url;
     }
   });
