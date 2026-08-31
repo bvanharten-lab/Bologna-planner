@@ -1,0 +1,696 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#8C2318">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Bologna">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<title>Bologna &amp; Modena — dagplanner</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,900;1,9..144,400;1,9..144,600&family=Work+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+  :root{
+    --rosso:#8C2318; --rosso-scuro:#5E150D; --ocra:#C98A3D;
+    --crema:#FBF3E4; --verde:#3F5E43; --inchiostro:#2B1D16;
+    --carta:#FFFDF8;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{font-family:'Work Sans',sans-serif;background:var(--crema);color:var(--inchiostro);line-height:1.5;padding-top:env(safe-area-inset-top)}
+  a{color:var(--rosso);text-decoration-thickness:1px;text-underline-offset:3px}
+  a:focus-visible,button:focus-visible,input:focus-visible{outline:2px solid var(--rosso);outline-offset:2px}
+  button{font-family:inherit;cursor:pointer}
+
+  header{background:var(--rosso);color:var(--crema);text-align:center;padding:1.8rem 1rem 0;overflow:hidden}
+  header .eyebrow{font-family:'Fraunces',serif;font-style:italic;color:var(--ocra);font-size:.9rem}
+  header h1{font-family:'Fraunces',serif;font-weight:900;font-size:clamp(1.8rem,7vw,3rem);line-height:1.02;margin:.25rem 0 .3rem}
+  header h1 .amp{font-style:italic;font-weight:400;color:var(--ocra)}
+  header .sub{color:#F3DFC4;font-size:.85rem;margin-bottom:1.3rem}
+  .archi{display:block;width:100%;height:40px}
+
+  nav{position:sticky;top:0;z-index:1100;background:var(--crema);border-bottom:2px solid var(--rosso);display:flex;overflow-x:auto}
+  nav button{flex:1 0 auto;background:none;border:none;padding:.75rem .9rem;font-size:.9rem;font-weight:600;color:var(--rosso-scuro);border-bottom:3px solid transparent;white-space:nowrap}
+  nav button[aria-selected="true"]{color:var(--rosso);border-bottom-color:var(--rosso);background:rgba(140,35,24,.06)}
+
+  main{max-width:820px;margin:0 auto;padding:1.2rem 1rem 4.5rem}
+  .paneel{display:none}
+  .paneel.actief{display:block}
+
+  h2.sectie{font-family:'Fraunces',serif;font-weight:900;font-size:1.45rem;color:var(--rosso);margin-bottom:.15rem}
+  p.sectie-sub{font-family:'Fraunces',serif;font-style:italic;color:var(--verde);margin-bottom:1rem}
+
+  .dagen{display:flex;gap:.4rem;overflow-x:auto;padding-bottom:.6rem;margin-bottom:.8rem}
+  .dagen button{border:1.5px solid var(--rosso);background:var(--carta);color:var(--rosso);border-radius:999px;padding:.35rem .85rem;font-size:.84rem;font-weight:600;white-space:nowrap}
+  .dagen button.aan{background:var(--rosso);color:var(--crema)}
+
+  .dag-acties{display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:.9rem}
+  .dag-acties button{border:1.5px solid var(--verde);background:var(--carta);color:var(--verde);border-radius:999px;padding:.3rem .85rem;font-size:.82rem;font-weight:600}
+  .dag-acties button:hover{background:var(--verde);color:var(--crema)}
+
+  .dag-kop{display:flex;align-items:baseline;gap:.7rem;border-bottom:3px solid var(--rosso);padding-bottom:.3rem;margin-bottom:.6rem}
+  .dag-kop .naam{font-family:'Fraunces',serif;font-weight:900;font-size:1.4rem;color:var(--rosso)}
+  .dag-kop .datum{font-size:.83rem;color:var(--rosso-scuro);font-weight:500}
+
+  #tijdlijn{min-height:120px;border:2px dashed rgba(140,35,24,.25);border-radius:14px;padding:.6rem;transition:background .15s}
+  #tijdlijn.drop{background:rgba(201,138,61,.14);border-color:var(--ocra)}
+  #tijdlijn .leeg{text-align:center;color:var(--rosso-scuro);opacity:.6;font-style:italic;padding:2rem 1rem;font-size:.9rem}
+
+  .item{background:var(--carta);border:1px solid rgba(140,35,24,.22);border-radius:12px;margin-bottom:0;padding:.6rem .7rem;display:grid;grid-template-columns:24px 66px 1fr auto;gap:.55rem;align-items:center;touch-action:pan-y}
+  .item.sleept{opacity:.4}
+  .item.boven{border-top:3px solid var(--ocra)}
+  .item .grip{color:var(--ocra);font-size:1.05rem;cursor:grab;user-select:none;text-align:center}
+  .item input.tijd{width:62px;border:1px solid rgba(140,35,24,.3);border-radius:8px;padding:.2rem .3rem;font-family:inherit;font-weight:700;font-size:.85rem;color:var(--rosso);background:var(--crema);text-align:center}
+  .item .info h3{font-family:'Fraunces',serif;font-weight:600;font-size:1rem;line-height:1.25}
+  .item .info .sub{font-size:.8rem;color:var(--verde)}
+  .item .info a{font-size:.78rem;margin-right:.6rem}
+  .item .ops{display:flex;gap:.2rem}
+  .item .ops button{border:none;background:rgba(140,35,24,.08);color:var(--rosso);border-radius:8px;width:30px;height:30px;font-size:.95rem;line-height:1}
+  .item .ops button:hover{background:var(--rosso);color:var(--crema)}
+
+  .loopje{display:flex;align-items:center;gap:.4rem;padding:.15rem 0 .15rem 1.4rem;font-size:.78rem;color:var(--verde);font-weight:600}
+  .loopje::before{content:"";display:inline-block;width:2px;height:14px;background:repeating-linear-gradient(to bottom,var(--ocra) 0 3px,transparent 3px 6px);margin-right:.3rem}
+
+  .filters{display:flex;gap:.4rem;flex-wrap:wrap;margin-bottom:.9rem}
+  .filters button{border:1.5px solid var(--verde);background:var(--carta);color:var(--verde);border-radius:999px;padding:.3rem .8rem;font-size:.82rem;font-weight:600}
+  .filters button.aan{background:var(--verde);color:var(--crema)}
+  .doel{background:rgba(63,94,67,.1);border-radius:10px;padding:.5rem .8rem;font-size:.85rem;margin-bottom:.9rem}
+  .doel b{color:var(--verde)}
+
+  .blok{background:var(--carta);border:1px solid rgba(63,94,67,.3);border-radius:12px;padding:.65rem .8rem;margin-bottom:.5rem;display:grid;grid-template-columns:24px 1fr auto;gap:.6rem;align-items:center;touch-action:pan-y}
+  .blok.sleept{opacity:.4}
+  .blok .grip{color:var(--ocra);cursor:grab;user-select:none;text-align:center}
+  .blok h3{font-family:'Fraunces',serif;font-weight:600;font-size:.98rem;line-height:1.25}
+  .blok .cat{display:inline-block;font-size:.72rem;font-weight:700;color:var(--verde);background:rgba(63,94,67,.12);border-radius:999px;padding:.02rem .55rem;margin-bottom:.15rem}
+  .blok p{font-size:.85rem;max-width:56ch}
+  .blok a{font-size:.78rem}
+  .blok .plus{border:1.5px solid var(--rosso);background:var(--carta);color:var(--rosso);border-radius:999px;padding:.35rem .8rem;font-weight:700;font-size:.85rem;white-space:nowrap}
+  .blok .plus:hover{background:var(--rosso);color:var(--crema)}
+  .blok.geplaatst{opacity:.45}
+  .blok.geplaatst .plus{border-color:var(--verde);color:var(--verde)}
+  .verborgen{display:none!important}
+
+  /* ---- reisblog ---- */
+  .blog-kop{font-family:'Fraunces',serif}
+  .blog-kop h3{font-weight:900;font-size:1.9rem;color:var(--rosso);line-height:1.05}
+  .blog-kop .datum{font-style:italic;color:var(--verde);font-size:1rem}
+  .blog-kop .verhaal{margin:.6rem 0 .3rem;font-size:1.05rem;line-height:1.6;max-width:60ch}
+  .blog-stats{display:flex;gap:.6rem;flex-wrap:wrap;margin:.5rem 0 1rem}
+  .blog-stats span{background:rgba(63,94,67,.12);color:var(--verde);border-radius:999px;padding:.2rem .8rem;font-size:.82rem;font-weight:700;font-family:'Work Sans',sans-serif}
+  #blogKaart{height:300px;border-radius:16px;border:2px solid var(--rosso);margin-bottom:1.2rem;z-index:1}
+  .bmarker{background:var(--rosso);color:var(--crema);border-radius:50%;width:26px;height:26px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.8rem;border:2px solid var(--crema);box-shadow:0 1px 4px rgba(0,0,0,.4);font-family:'Work Sans',sans-serif}
+  .bstop{background:var(--carta);border:1px solid rgba(140,35,24,.2);border-radius:16px;overflow:hidden;margin-bottom:0}
+  .bstop .foto{width:100%;height:190px;object-fit:cover;display:block;background:linear-gradient(135deg,var(--ocra),var(--rosso));}
+  .bstop .foto-fallback{width:100%;height:150px;display:flex;align-items:center;justify-content:center;font-size:3rem;background:linear-gradient(135deg,rgba(201,138,61,.35),rgba(140,35,24,.25))}
+  .bstop .tekst{padding:.9rem 1rem 1rem}
+  .bstop .regel{display:flex;align-items:baseline;gap:.6rem;flex-wrap:wrap}
+  .bstop .nr{background:var(--rosso);color:var(--crema);border-radius:50%;min-width:24px;height:24px;display:inline-flex;align-items:center;justify-content:center;font-size:.78rem;font-weight:700;align-self:center}
+  .bstop .tijd{font-weight:700;color:var(--rosso);font-size:.9rem}
+  .bstop h4{font-family:'Fraunces',serif;font-weight:600;font-size:1.25rem;line-height:1.2}
+  .bstop .lang{margin:.45rem 0 .3rem;font-size:.94rem;line-height:1.6;max-width:62ch}
+  .bstop .knoppen{display:flex;gap:.5rem;flex-wrap:wrap;margin-top:.45rem}
+  .bstop .knoppen a{display:inline-block;font-size:.8rem;font-weight:600;text-decoration:none;border:1.5px solid var(--rosso);border-radius:999px;padding:.22rem .75rem}
+  .bstop .knoppen a:hover{background:var(--rosso);color:var(--crema)}
+  .bloop{display:flex;align-items:center;gap:.5rem;margin:.5rem 0 .5rem 1.1rem;color:var(--verde);font-weight:700;font-size:.85rem}
+  .bloop::before{content:"";width:2px;height:26px;background:repeating-linear-gradient(to bottom,var(--ocra) 0 4px,transparent 4px 8px)}
+  .blog-leeg{text-align:center;font-style:italic;color:var(--rosso-scuro);opacity:.7;padding:2rem 1rem}
+
+  .toast{position:fixed;bottom:1rem;left:50%;transform:translateX(-50%);background:var(--verde);color:var(--crema);padding:.55rem 1.1rem;border-radius:999px;font-size:.88rem;font-weight:600;opacity:0;pointer-events:none;transition:opacity .2s;z-index:2000}
+  .toast.zien{opacity:1}
+
+  .waarschuwing{font-size:.8rem;color:var(--rosso-scuro);font-style:italic;margin-top:.9rem}
+  footer{text-align:center;padding:1.4rem 1rem 2rem;font-family:'Fraunces',serif;font-style:italic;color:var(--rosso)}
+  @media(max-width:560px){.item{grid-template-columns:20px 58px 1fr auto}}
+</style>
+</head>
+<body>
+
+<header>
+  <p class="eyebrow">costruite la vostra giornata</p>
+  <h1>Bologna <span class="amp">&amp;</span> Modena</h1>
+  <p class="sub">dagplanner · 4 – 9 september 2026 · wijzigingen worden automatisch bewaard</p>
+  <svg class="archi" viewBox="0 0 720 40" preserveAspectRatio="none" aria-hidden="true">
+    <path fill="#FBF3E4" d="M0,40 L0,26 A40,40 0 0 1 80,26 A40,40 0 0 1 160,26 A40,40 0 0 1 240,26 A40,40 0 0 1 320,26 A40,40 0 0 1 400,26 A40,40 0 0 1 480,26 A40,40 0 0 1 560,26 A40,40 0 0 1 640,26 A40,40 0 0 1 720,26 L720,40 Z"/>
+  </svg>
+</header>
+
+<nav role="tablist">
+  <button role="tab" aria-selected="true" data-tab="plan">📅 Planning</button>
+  <button role="tab" aria-selected="false" data-tab="blog">📖 Reisblog</button>
+  <button role="tab" aria-selected="false" data-tab="stenen">🧱 Bouwstenen</button>
+</nav>
+
+<main>
+
+<section id="plan" class="paneel actief">
+  <h2 class="sectie">Mijn planning</h2>
+  <p class="sectie-sub">sleep om te ordenen · tik op de tijd om die aan te passen</p>
+  <div class="dagen" id="dagKiezer"></div>
+  <div class="dag-kop"><span class="naam" id="dagNaam"></span><span class="datum" id="dagDatum"></span></div>
+  <div class="dag-acties">
+    <button id="naarBlog">📖 Bekijk als reisblog</button>
+    <button id="routeDag">🗺️ Route in Google Maps</button>
+    <button id="naarStenen">➕ Bouwstenen</button>
+    <button id="herstelDag">↩️ Herstel aanbevolen</button>
+    <button id="leegDag">🗑️ Maak dag leeg</button>
+    <button id="resetAlles">♻️ Reset hele reis</button>
+  </div>
+  <div id="tijdlijn"></div>
+  <p class="waarschuwing">Je planning wordt automatisch opgeslagen op dit apparaat. Op een ander toestel begin je met de aanbevolen route.</p>
+</section>
+
+<section id="blog" class="paneel">
+  <div class="dagen" id="blogDagKiezer"></div>
+  <div id="blogInhoud"></div>
+</section>
+
+<section id="stenen" class="paneel">
+  <h2 class="sectie">Bouwstenen</h2>
+  <p class="sectie-sub">tik op + of sleep (desktop) naar je planning</p>
+  <div class="doel">Toevoegen aan: <b id="doelDag"></b> — wissel van dag via het tabblad Planning.</div>
+  <div class="filters" id="stFilters">
+    <button data-f="alles" class="aan">Alles</button>
+    <button data-f="aanbevolen">⭐ Aanbevolen route</button>
+    <button data-f="eten">🍝 Eten &amp; drinken</button>
+    <button data-f="pizza">🍕 Pizza &amp; aperitivo</button>
+    <button data-f="gelato">🍨 Gelato &amp; koffie</button>
+    <button data-f="cultuur">🏛️ Cultuur &amp; zien</button>
+    <button data-f="plek">🌿 Plekjes &amp; uitzicht</button>
+    <button data-f="modena">🚂 Modena</button>
+    <button data-f="alternatief">🔄 Alternatieven</button>
+  </div>
+  <div id="blokLijst"></div>
+</section>
+
+</main>
+
+<div class="toast" id="toast"></div>
+<footer>Buon viaggio! 🍷</footer>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+/* ================= DATA ================= */
+const M = q => "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent(q);
+
+/* Elke bouwsteen: cat, n(aam), d(kort), l(ang, voor het reisblog), q(Maps-zoekterm), la/lo (coördinaten), w(ebsite), wiki (it.wikipedia-titel voor foto) */
+const BLOKKEN = {
+ /* — aanbevolen route — */
+ centrale:{cat:"aanbevolen",n:"Bologna Centrale (aankomst/vertrek)",d:"Marconi Express ↔ vliegveld: ±7½ min, €12,80.",l:"Het spoorknooppunt van Noord-Italië en jullie poort tot de stad. De Marconi Express-monorail zoeft in zeven en een halve minuut tussen het vliegveld en het perron — sneller dan je koffer kunt openritsen.",q:"Bologna Centrale",la:44.5059,lo:11.3434,wiki:"Stazione di Bologna Centrale"},
+ airbnb:{cat:"aanbevolen",n:"🏠 Airbnb — Via Giovanni Amendola 11",d:"Jullie thuisbasis, 4 min lopen van Bologna Centrale.",l:"Jullie thuisbasis voor de week: op een paar minuten lopen van het station (ideaal met koffers én voor de trein naar Modena), en een kwartiertje wandelen van Piazza Maggiore. Koffers droppen en de stad in.",q:"Via Giovanni Amendola 11 Bologna",la:44.5043,lo:11.3411},
+ orsa:{cat:"aanbevolen",n:"Osteria dell'Orsa",d:"Informeel, geen reservering nodig, laat open. Tagliatelle al ragù.",l:"Studentikoos, luidruchtig en heerlijk ongecompliceerd — precies wat je wilt op een aankomstavond. De tagliatelle al ragù is hier al decennia het huisnummer; deel er tortellini bij en bestel een karaf huiswijn.",q:"Osteria dell'Orsa Bologna",la:44.4971,lo:11.3475,w:"http://www.osteriadellorsa.it/"},
+ duetorri:{cat:"aanbevolen",n:"Due Torri (avondwandeling)",d:"Via Zamboni → Due Torri → Piazza Maggiore.",l:"De scheve Asinelli (97 m) en zijn nog schevere buurman Garisenda zijn al negen eeuwen het symbool van de stad. 's Avonds aangelicht, met lege straten eromheen, zijn ze op hun indrukwekkendst.",q:"Due Torri Bologna",la:44.4942,lo:11.3467,wiki:"Torre degli Asinelli"},
+ maggiore:{cat:"aanbevolen",n:"Piazza Maggiore & Neptunusfontein",d:"Het hart van de stad; klein ontbijt: cappuccino + cornetto.",l:"De huiskamer van Bologna, omringd door middeleeuwse paleizen en Giambologna's bronzen Neptunus. Doe als de Bolognesi: cappuccino en cornetto aan de bar, en kijk hoe het plein wakker wordt.",q:"Piazza Maggiore Bologna",la:44.4939,lo:11.3432,wiki:"Piazza Maggiore"},
+ petronio:{cat:"aanbevolen",n:"Basilica di San Petronio",d:"Open 10–18. Langste zonnewijzer ter wereld.",l:"Een van de grootste kerken ter wereld — en bewust half af: de marmeren gevel stopt halverwege. Binnen loopt de langste zonnewijzer op aarde (66,8 m) diagonaal over de vloer; rond het middaguur zie je de zon er exact op vallen.",q:"Basilica di San Petronio",la:44.4934,lo:11.3432,w:"https://www.basilicadisanpetronio.org/",wiki:"Basilica di San Petronio"},
+ archi:{cat:"aanbevolen",n:"Archiginnasio & Anatomisch Theater",d:"Zondag gesloten — plan op zaterdag.",l:"Eeuwenlang het hoofdgebouw van de oudste universiteit van de westerse wereld (1088), met duizenden studentenwapens op de muren. Het houten Anatomisch Theater, waar ooit lijken werden ontleed onder toeziend oog van de 'gevilde mannen', is het hoogtepunt.",q:"Archiginnasio Bologna",la:44.4920,lo:11.3434,w:"http://www.archiginnasio.it/",wiki:"Archiginnasio di Bologna"},
+ quadri:{cat:"aanbevolen",n:"Quadrilatero — lunch inkopen",d:"Mortadella, prosciutto, Parmigiano, brood.",l:"De middeleeuwse marktbuurt achter Piazza Maggiore, waar al duizend jaar wordt gehandeld. Kraampjes en salumeria's puilen uit van mortadella, verse pasta en kaaswielen — koop hier jullie eigen lunch bij elkaar.",q:"Quadrilatero Bologna",la:44.4937,lo:11.3448,wiki:"Quadrilatero (Bologna)"},
+ sole:{cat:"aanbevolen",n:"Osteria del Sole",d:"Sinds 1465: wijn van hen, eten breng je zelf mee. Vr/za open.",l:"Open sinds 1465 en het systeem is nooit veranderd: zij schenken uitsluitend wijn en bier, het eten breng je zelf mee. Schuif aan een lange houten tafel tussen de stamgasten en pak je mortadella uit — traditie op z'n Bolognees.",q:"Osteria del Sole Bologna",la:44.4939,lo:11.3443,w:"http://www.osteriadelsole.it/"},
+ stefano:{cat:"aanbevolen",n:"Piazza Santo Stefano",d:"Zeven-kerken-complex.",l:"Het mooiste plein van de stad loopt trechtervormig toe op de basiliek van Santo Stefano, ooit een complex van zeven in elkaar geschoven kerken ('Sette Chiese'). Binnen dwaal je door kloostergangen en kapellen uit de vroege middeleeuwen.",q:"Piazza Santo Stefano Bologna",la:44.4923,lo:11.3483,wiki:"Basilica di Santo Stefano (Bologna)"},
+ orologio:{cat:"aanbevolen",n:"Torre dell'Orologio",d:"€10, reserveren via Bologna Welcome. Uitzicht over de rode daken.",l:"De klokkentoren van het stadspaleis Palazzo d'Accursio kijkt recht over Piazza Maggiore. Vanaf het terras begrijp je waarom Bologna 'la Rossa' heet: een zee van terracottadaken tot aan de heuvels.",q:"Torre dell'Orologio Bologna",la:44.4937,lo:11.3422,w:"https://www.bolognawelcome.com/",wiki:"Palazzo d'Accursio"},
+ serra:{cat:"aanbevolen",n:"Trattoria di Via Serra ★",d:"Reservering #1 · +39 051 631 2330. Zo & ma gesloten.",l:"Nét buiten de toeristenroute in de Bolognina-wijk, en voor veel kenners de beste traditionele keuken van de stad. Alles draait om Emiliaanse klassiekers met topproducten; reserveer ruim vooraf en neem de tijd.",q:"Trattoria di Via Serra Bologna",la:44.5095,lo:11.3456,w:"http://www.trattoriadiviaserra.it/"},
+ sanluca:{cat:"aanbevolen",n:"Portico naar San Luca",d:"3,8 km / 666 bogen omhoog. Relaxt: bus tot Arco del Meloncello.",l:"De langste portico ter wereld: 3,8 kilometer en 666 bogen klimmen van Porta Saragozza naar het bedevaartsheiligdom op de heuvel — sinds 2021 UNESCO-werelderfgoed. Boven wachten de koepelkerk én een weids uitzicht over stad en Apennijnen.",q:"Santuario Madonna di San Luca",la:44.4791,lo:11.2981,w:"https://www.santuariodisanluca.it/",wiki:"Santuario della Madonna di San Luca"},
+ rina:{cat:"aanbevolen",n:"Sfoglia Rina",d:"Verse pasta, vóór 12:00 gaan i.v.m. de rij.",l:"Begonnen als pastawinkel, uitgegroeid tot dé plek waar je sfogline achter het raam verse pasta ziet rollen. Informeel en snel; ga vóór twaalven en kies iets wat je nog niet had — gramigna met salsiccia bijvoorbeeld.",q:"Sfoglia Rina Bologna",la:44.4932,lo:11.3463,w:"http://www.sfogliarina.it/"},
+ margherita:{cat:"aanbevolen",n:"Giardini Margherita",d:"Park voor een middag niks moeten.",l:"Het grote 19e-eeuwse stadspark net buiten de muren, met vijver, brede lanen en in september nog volop terrasweer. De kiosken en Le Serre (oude kassen, nu café) zijn perfect voor een lome middag.",q:"Giardini Margherita Bologna",la:44.4827,lo:11.3524,wiki:"Giardini Margherita"},
+ pratello:{cat:"aanbevolen",n:"Aperitivo — Via del Pratello",d:"Spritz en hapjes in de leukste kroegenstraat.",l:"De eigenzinnigste straat van Bologna: rijen kroegjes, osteria's en buurtbewoners op krukjes tegen de gevel. Rond zes uur vult alles zich voor de aperitivo — bestel een spritz en schuif gewoon ergens aan.",q:"Via del Pratello Bologna",la:44.4955,lo:11.3327,wiki:"Via del Pratello"},
+ erbe:{cat:"aanbevolen",n:"Mercato delle Erbe",d:"Overdekte markt aan de westkant van het centrum.",l:"De grootste overdekte markt van het centrum (1910): groente- en viskramen in het midden, eettentjes en bars langs de randen. Minder toeristisch dan het Quadrilatero en 's middags heerlijk levendig.",q:"Mercato delle Erbe Bologna",la:44.4962,lo:11.3383,w:"http://www.mercatodelleerbe.eu/",wiki:"Mercato delle Erbe"},
+ finestrella:{cat:"aanbevolen",n:"Finestrella di Via Piella",d:"Het raampje op het kanaal — vroeg gaan.",l:"Achter een onooglijk luikje in de muur verschijnt opeens klein Venetië: het Canale delle Moline met kleurige huizen aan het water. Bologna had ooit zestig kilometer kanalen; hier zie je wat ervan over is.",q:"Finestrella Via Piella Bologna",la:44.4986,lo:11.3452,wiki:"Canali di Bologna"},
+ colombina:{cat:"aanbevolen",n:"Vicolo Colombina ★",d:"Reservering #2 · +39 051 233919 · tot 23:30.",l:"Verstopt in een steegje op een minuut van Piazza Maggiore, met een kaart vol klassiekers: van tortellini in brodo tot cotoletta alla Bolognese. Ideaal afscheidsdiner: alles delen en van elkaar proeven.",q:"Vicolo Colombina Bologna",la:44.4924,lo:11.3422,w:"http://www.vicolocolombina.it/"},
+ workshop:{cat:"aanbevolen",n:"Pasta-workshop of foodtour",d:"Via Bologna Welcome, vanaf ±€55.",l:"Na dagen tagliatelle eten is het tijd om te begrijpen hóé: onder begeleiding van een sfoglina leer je zelf deeg rollen en tortellini vouwen. Boek via Bologna Welcome; een foodtour door de markt is het alternatief.",q:"Bologna Welcome",la:44.4941,lo:11.3430,w:"https://www.bolognawelcome.com/"},
+ souvenirs:{cat:"aanbevolen",n:"Souvenirs — Quadrilatero",d:"Parmigiano, mortadella, balsamico, pasta voor thuis.",l:"Laatste rondje langs de salumeria's: laat Parmigiano vacuüm trekken, kies een fles echte balsamico en neem een pak gedroogde tortellini mee. Zo smaakt de reis thuis nog even door.",q:"Quadrilatero Bologna",la:44.4937,lo:11.3448},
+ panino:{cat:"aanbevolen",n:"Panino met mortadella",d:"Snelle laatste lunch, geen restaurant meer.",l:"Geen driegangenafscheid maar het perfecte slotakkoord: een warm broodje dik belegd met mortadella, staand gegeten onder een portico. Simpeler en Bolognezer wordt het niet.",q:"Quadrilatero Bologna",la:44.4937,lo:11.3448},
+ /* — eten & drinken — */
+ simoni:{cat:"eten",n:"Salumeria Simoni",d:"Dé salumeria in het Quadrilatero voor je picknick.",l:"Familiebedrijf sinds 1960 en het beste adres in het Quadrilatero voor mortadella, culatello en gerijpte Parmigiano. Ze snijden alles vers en vacuümeren desgewenst voor in de koffer.",q:"Salumeria Simoni Bologna",la:44.4935,lo:11.3451},
+ tamburini:{cat:"eten",n:"Tamburini",d:"Delicatessenzaak (1932) met wijnbar — taglieri + Pignoletto.",l:"Sinds 1932 een instituut: half delicatessenwinkel, half wijnbar die uitpuilt op straat. Bestel een taglieri met vleeswaren en kaas en een glas Pignoletto, en kijk het marktgewoel voorbijtrekken.",q:"Tamburini Bologna",la:44.4938,lo:11.3454},
+ atti:{cat:"eten",n:"Paolo Atti & Figli",d:"Bakkerij/pastawinkel sinds 1868.",l:"Al sinds 1868 bakt en rolt Atti in dezelfde art-nouveauwinkel: brood, torta di riso en handgemaakte tortellini. Ook als je niets koopt is de winkel zelf een klein museum.",q:"Paolo Atti e Figli Bologna",la:44.4937,lo:11.3462},
+ brisa:{cat:"eten",n:"Forno Brisa",d:"Moderne bakkerij — ontbijt of focaccia onderweg.",l:"Jonge bakkers die zuurdesem, eigen graan en specialty coffee combineren — de moderne kant van brood-Bologna. Hun pistache-cornetto en kaneelbroodjes zijn ontbijtklassiekers; verwacht een rijtje na negenen.",q:"Forno Brisa Bologna",la:44.5003,lo:11.3429},
+ banco:{cat:"eten",n:"Banco 32 (Mercato delle Erbe)",d:"Visbar ín de markt: fritto misto tussen de kramen.",l:"Een visbank die uitgroeide tot eettent middenin de Mercato delle Erbe: rauwe vis, fritto misto en een glas koude witte wijn tussen de marktkramen. Fijn tegenwicht na al het vlees en de pasta.",q:"Banco 32 Mercato delle Erbe Bologna",la:44.4962,lo:11.3383},
+ momort:{cat:"eten",n:"Mò Mortadella Lab",d:"Streetfood: panini volledig gewijd aan mortadella.",l:"Een piepklein streetfoodlab dat maar één ding doet: panini met mortadella in alle denkbare combinaties — met pistachecrème, burrata of gefrituurde kroketjes. Neem je broodje mee naar Piazza Maggiore.",q:"Mò Mortadella Lab Bologna",la:44.4946,lo:11.3476},
+ bottegaportici:{cat:"eten",n:"Bottega Portici",d:"Verse tortellini als fast(ish) food onder de portici.",l:"Verse pasta in fastfoodtempo, pal onder de Due Torri: sfogline rollen het deeg in de open keuken en vijf minuten later staat je bakje tortellini er. Het dakterras kijkt uit op de torens.",q:"Bottega Portici Bologna",la:44.4947,lo:11.3467},
+ rosso:{cat:"eten",n:"Trattoria del Rosso",d:"Een van de oudste trattoria's van de stad; simpel en echt.",l:"Naar verluidt de oudste nog draaiende trattoria van Bologna, en nog altijd zonder poespas: papieren placemats, grote porties en eerlijke prijzen. De tortellini in brodo zijn er als vanouds.",q:"Trattoria del Rosso Bologna",la:44.4989,lo:11.3459},
+ brocca:{cat:"eten",n:"Osteria Broccaindosso",d:"Bekend om de eindeloze antipasti- en dessertparade.",l:"Berucht en bemind om het ritueel: schalen antipasti blijven komen tot je stopt, en na de pasta herhaalt zich dat met desserts. Kom met honger, reserveer, en plan er geen lunch voor.",q:"Osteria Broccaindosso Bologna",la:44.4919,lo:11.3547},
+ /* — pizza & aperitivo — */
+ ranzani:{cat:"pizza",n:"Ranzani 13",d:"Creatieve pizza's en craft beer, buiten het centrum.",l:"Buiten het centrum maar de wandeling waard: lang gerezen deeg, eigenzinnige toppings en een indrukwekkende craftbierkaart in een zaak met jaren-70-arcadesfeer. Perfect voor de bewust lichte avond.",q:"Ranzani 13 Bologna",la:44.5011,lo:11.3578},
+ berbere:{cat:"pizza",n:"Berberè",d:"Zuurdesem-pizza in punten om te delen.",l:"Twee broers uit Bologna begonnen hier de zuurdesem-pizzarevolutie die inmiddels heel Italië over is. De pizza's komen voorgesneden in punten — bestel er meerdere en deel alles.",q:"Berberè Bologna",la:44.4949,lo:11.3519},
+ camera:{cat:"pizza",n:"Camera a Sud",d:"Zuid-Italiaans wijnbarretje in het ghetto.",l:"Knus wijnbarretje op een hoekje van het oude joodse kwartier, met Zuid-Italiaanse wijnen en borden vol burrata en taralli. Studenten, buurtbewoners en een enkele toerist — precies de goede mix.",q:"Camera a Sud Bologna",la:44.4964,lo:11.3472},
+ stanze:{cat:"pizza",n:"Le Stanze",d:"Cocktails onder de fresco's van een 17e-eeuwse privékapel.",l:"Borrelen in een voormalige privékapel uit de 17e eeuw, met originele fresco's boven je hoofd en een lange cocktailkaart. 's Avonds draait er regelmatig een dj — kom vroeg voor een goede plek.",q:"Le Stanze Bologna",la:44.4981,lo:11.3478},
+ /* — gelato & koffie — */
+ cremstef:{cat:"gelato",n:"Cremeria Santo Stefano",d:"Voor veel Bolognesi de beste gelateria van de stad.",l:"Buurtgelateria die door veel Bolognesi als beste van de stad wordt genoemd; alles wordt achterin vers gedraaid. Probeer de pistacchio salato of de crema bolognese — en let op: ma/di gesloten.",q:"Cremeria Santo Stefano Bologna",la:44.4882,lo:11.3523},
+ cavour:{cat:"gelato",n:"Cremeria Cavour",d:"Chique gelateria aan Piazza Cavour — pistache!",l:"Elegante gelateria aan het rustige Piazza Cavour, met een rij die regelmatig de stoep op krult. De pistachecrema en de wisselende seizoenssmaken zijn het wachten waard.",q:"Cremeria Cavour Bologna",la:44.4912,lo:11.3442},
+ sorbetteria:{cat:"gelato",n:"La Sorbetteria Castiglione",d:"Klassieker sinds 1994 met eigen smaken.",l:"Sinds 1994 een begrip aan Via Castiglione, beroemd om eigen creaties als Dolce Emma (ricotta met vijgen). Combineer met een avondwandeling langs de portico's richting Giardini Margherita.",q:"La Sorbetteria Castiglione Bologna",la:44.4878,lo:11.3481},
+ gianni:{cat:"gelato",n:"Gelateria Gianni",d:"Bekende naam midden in het centrum.",l:"Vrolijke gelateria op loopafstand van Piazza Maggiore, met fantasienamen als Brontolo en Il Signore degli Anelli op de bakken. Handig gelegen voor een tussendoortje tijdens het slenteren.",q:"Gelateria Gianni Bologna",la:44.4958,lo:11.3402},
+ terzi:{cat:"gelato",n:"Caffè Terzi",d:"Serieuze koffiezaak, single origins.",l:"Manuel Terzi behandelt koffie als een sommelier wijn: single origins uit Ethiopië tot India, met zorg gebrouwen en uitgelegd. Voor wie na dagen espresso-aan-de-bar één keer écht wil proeven.",q:"Caffè Terzi Bologna",la:44.4953,lo:11.3455},
+ /* — cultuur — */
+ cecilia:{cat:"cultuur",n:"Oratorio di Santa Cecilia",d:"Kapel vol 16e-eeuwse fresco's, vaak vrijwel leeg.",l:"Een kapel aan Via Zamboni die van muur tot muur is beschilderd met vroeg-16e-eeuwse fresco's over het leven van Sint-Cecilia. Gratis, stil en vaak vrijwel leeg — een mini-Sixtijnse ervaring zonder gedrang.",q:"Oratorio di Santa Cecilia Bologna",la:44.4960,lo:11.3500,wiki:"Oratorio di Santa Cecilia (Bologna)"},
+ domenico:{cat:"cultuur",n:"Basilica di San Domenico",d:"Drie vroege beelden van Michelangelo.",l:"Hier ligt Sint-Dominicus zelf, in een marmeren praalgraf waaraan eeuwen is gewerkt — met drie kleine beelden van een piepjonge Michelangelo. Veel rustiger dan San Petronio en minstens zo rijk.",q:"Basilica di San Domenico Bologna",la:44.4896,lo:11.3440,wiki:"Basilica di San Domenico (Bologna)"},
+ vita:{cat:"cultuur",n:"Santa Maria della Vita",d:"Het Compianto: zeven aangrijpende terracottabeelden.",l:"Achter een bescheiden gevel in het Quadrilatero schuilt het aangrijpendste kunstwerk van Bologna: Niccolò dell'Arca's Compianto, zeven levensgrote terracottafiguren die schreeuwend rouwen om de dode Christus (15e eeuw). Vijf minuten binnenlopen die je niet meer vergeet.",q:"Santa Maria della Vita Bologna",la:44.4935,lo:11.3446,wiki:"Chiesa di Santa Maria della Vita"},
+ salaborsa:{cat:"cultuur",n:"Biblioteca Salaborsa",d:"Glazen vloer boven Romeinse opgravingen. Gratis.",l:"De openbare bibliotheek aan Piazza del Nettuno is een overdekt stadsplein op zich: onder de glazen vloer liggen de opgravingen van Romeins Bononia. Gratis, koel en een perfect regen- of rustmoment.",q:"Biblioteca Salaborsa Bologna",la:44.4946,lo:11.3419,wiki:"Biblioteca Salaborsa"},
+ corpus:{cat:"cultuur",n:"Santuario del Corpus Domini",d:"Volledig off the beaten path.",l:"In deze barokke kloosterkerk zit de heilige Caterina de' Vigri — al ruim vijf eeuwen — opgebaard op haar troon. Bijzonder, ietwat surrealistisch en vrijwel zonder toeristen; de zusters vertellen er graag over.",q:"Santuario Corpus Domini Bologna",la:44.4893,lo:11.3397,wiki:"Chiesa del Corpus Domini (Bologna)"},
+ pepoli:{cat:"cultuur",n:"Museo della Storia di Bologna",d:"Palazzo Pepoli: de stadsgeschiedenis, modern gepresenteerd.",l:"In het middeleeuwse Palazzo Pepoli wordt 2500 jaar stadsgeschiedenis verteld met multimedia en theater in plaats van vitrines. Goed audiogids-Engels en een prima regenplan van een uur of twee.",q:"Palazzo Pepoli Museo della Storia di Bologna",la:44.4920,lo:11.3465,wiki:"Palazzo Pepoli"},
+ colombano:{cat:"cultuur",n:"San Colombano — Collezione Tagliavini",d:"Historische klavecimbels en orgels in een kerk.",l:"Een gerestaureerde middeleeuwse kerk vol bespeelbare klavecimbels, orgels en fortepiano's uit vijf eeuwen, verzameld door organist Luigi Tagliavini. Met fresco's, een crypte en gratis audiogids — een pareltje.",q:"San Colombano Collezione Tagliavini Bologna",la:44.4967,lo:11.3410,wiki:"Chiesa di San Colombano (Bologna)"},
+ prendiparte:{cat:"cultuur",n:"Torre Prendiparte",d:"Middeleeuwse toren, beperkt te beklimmen.",l:"Met 60 meter de op één na hoogste toren van de stad, bijgenaamd 'de Gekroonde' om zijn kartelrand. Alleen op bepaalde dagen (vaak zondag) te beklimmen — mét de Asinelli op je foto's, in plaats van erop te staan.",q:"Torre Prendiparte Bologna",la:44.4960,lo:11.3448,wiki:"Torre Prendiparte"},
+ pinacoteca:{cat:"cultuur",n:"Pinacoteca Nazionale (regenplan)",d:"Carracci en Guido Reni in de universiteitswijk.",l:"De nationale schilderijencollectie in de universiteitswijk: Giotto, Rafaëls Santa Cecilia en de hele Bolognese school van Carracci tot Guido Reni. Rustig, overzichtelijk en zelden druk.",q:"Pinacoteca Nazionale di Bologna",la:44.4978,lo:11.3535,wiki:"Pinacoteca nazionale di Bologna"},
+ mambo:{cat:"cultuur",n:"MAMbo (regenplan)",d:"Moderne kunst in een oude broodfabriek.",l:"Modern-kunstmuseum in de voormalige gemeentelijke broodfabriek, met daarin ook het Morandi-museum — gewijd aan Bologna's beroemdste schilder van stille flessen en kruiken. Combineert goed met de Manifattura-buurt.",q:"MAMbo Bologna",la:44.5027,lo:11.3366,wiki:"MAMbo"},
+ certosa:{cat:"cultuur",n:"Certosa di Bologna",d:"Monumentale begraafplaats vol beeldhouwkunst.",l:"Een voormalig kartuizerklooster dat in 1801 monumentale begraafplaats werd, geprezen door Byron en Dickens. Kloostergangen vol 19e-eeuwse beelden — plechtig, prachtig en logisch te combineren met San Luca.",q:"Certosa di Bologna",la:44.4978,lo:11.3071,wiki:"Certosa di Bologna"},
+ /* — plekjes & uitzicht — */
+ isolani:{cat:"plek",n:"Corte Isolani",d:"Verborgen doorgang met 13e-eeuwse houten portico.",l:"Een half verborgen winkeldoorgang die Strada Maggiore met Piazza Santo Stefano verbindt, beginnend onder een zeldzame 13e-eeuwse houten portico van negen meter hoog. Zoek de drie pijlen in het plafond — en het verhaal erachter.",q:"Corte Isolani Bologna",la:44.4929,lo:11.3485,wiki:"Casa Isolani"},
+ ghetto:{cat:"plek",n:"Ghetto Ebraico",d:"Smalle straatjes en wijnbarretjes achter de Due Torri.",l:"Het oude joodse kwartier rond Via dell'Inferno: nauwe steegjes, ambachtelijke ateliers en een handvol wijnbars. Van het 16e-eeuwse getto resteert weinig tastbaars, maar de sfeer is er 's avonds op z'n best.",q:"Ghetto Ebraico Bologna",la:44.4960,lo:11.3468},
+ moline:{cat:"plek",n:"Via delle Moline — kanalen",d:"Meer zichtbaar kanaal, 's ochtends voor jezelf.",l:"Bologna dreef ooit op waterkracht: zestig kilometer kanalen dreven de zijdemolens aan. Langs Via delle Moline zie je het water nog stromen — zonder de rij van de Finestrella verderop.",q:"Via delle Moline Bologna",la:44.4981,lo:11.3477,wiki:"Canali di Bologna"},
+ bosco:{cat:"plek",n:"San Michele in Bosco",d:"Gratis panorama over de stad.",l:"Kerk en voormalig klooster op de eerste heuvel boven de stad, twintig minuten klimmen vanaf het centrum. Het bordes geeft hét ansichtkaartuitzicht over Bologna — gratis, en met een curieus 'telescoop-effect' in de kloostergang.",q:"San Michele in Bosco Bologna",la:44.4820,lo:11.3420,wiki:"Chiesa di San Michele in Bosco"},
+ ghigi:{cat:"plek",n:"Parco Villa Ghigi",d:"Glooiend park op de heuvels met weids uitzicht.",l:"Een glooiend landschapspark van boomgaarden en wijngaarden, tien minuten boven Porta San Mamolo. Neem brood en kaas mee van de markt en picknick met de hele stad aan je voeten.",q:"Parco Villa Ghigi Bologna",la:44.4768,lo:11.3267},
+ mercanzia:{cat:"plek",n:"Piazza della Mercanzia",d:"Gotisch handelspaleis aan de voet van de Due Torri.",l:"Het gotische handelspaleis uit 1391 — nog altijd Kamer van Koophandel — bewaakt een driehoekig pleintje aan de voet van de torens. Een van de fotogenieke hoekjes waar je vanzelf langsloopt; sta even stil.",q:"Piazza della Mercanzia Bologna",la:44.4940,lo:11.3465,wiki:"Palazzo della Mercanzia"},
+ verdi:{cat:"plek",n:"Piazza Verdi & universiteitswijk",d:"Studentenleven, straatmuziek — 's avonds levendig.",l:"Het kloppend studentenhart voor het operatheater: straatmuzikanten, goedkope bars en discussies tot diep in de nacht. Rauwer dan de rest van het centrum, maar nergens voel je de oudste universiteit ter wereld zó.",q:"Piazza Verdi Bologna",la:44.4963,lo:11.3507},
+ /* — Modena — */
+ albinelli:{cat:"modena",n:"Mercato Storico Albinelli",d:"Historische markt, open tot 15:00.",l:"De liberty-stijl markthal van Modena (1931), met het fonteintje in het midden en kramen vol Parmigiano, balsamico en gnocco fritto. Kom in de ochtend, als de Modenezen zelf hun boodschappen doen.",q:"Mercato Albinelli Modena",la:44.6448,lo:10.9255,w:"http://www.mercatoalbinelli.it/",wiki:"Mercato Albinelli"},
+ grande:{cat:"modena",n:"Piazza Grande, Duomo & Ghirlandina",d:"UNESCO-ensemble op loopafstand van elkaar.",l:"De romaanse Duomo (1099), de scheve toren Ghirlandina en Piazza Grande vormen samen één UNESCO-werelderfgoed. De leeuwen bij het portaal en de reliëfs van Wiligelmo behoren tot de top van de Europese romaanse kunst.",q:"Piazza Grande Modena",la:44.6460,lo:10.9260,wiki:"Duomo di Modena"},
+ ferrari:{cat:"modena",n:"Museo Enzo Ferrari",d:"Dagelijks 9–19, tickets online.",l:"Rond het geboortehuis van Enzo Ferrari ligt een futuristische gele hal — geïnspireerd op een motorkap — vol iconische rode auto's en het levensverhaal van il Commendatore. Ook zonder benzine in je bloed indrukwekkend.",q:"Museo Enzo Ferrari Modena",la:44.6521,lo:10.9363,w:"https://www.ferrari.com/it-IT/museums/enzo-ferrari-modena",wiki:"Museo casa Enzo Ferrari"},
+ acetaia:{cat:"modena",n:"Acetaia-rondleiding (balsamico)",d:"Traditionele balsamico in houten vaten — vooraf boeken.",l:"Op een zolder vol houten vaten rijpt Aceto Balsamico Tradizionale minimaal twaalf jaar — sommige batterijen zijn ouder dan de familie die ze beheert. Een rondleiding met proeverij (boek vooraf via Visit Modena) verandert voorgoed hoe je 'balsamico' uit de supermarkt ziet.",q:"acetaia visita Modena",la:44.6460,lo:10.9260},
+ maranello:{cat:"modena",n:"Museo Ferrari Maranello",d:"Het grotere Ferrari-museum, shuttle vanaf Modena.",l:"Het grote broertje in Maranello, pal naast de fabriek: F1-wagens, de Hall of Victories en simulatoren. Alleen doen als auto's echt jullie ding zijn — reken met shuttle en bezoek op een halve dag.",q:"Museo Ferrari Maranello",la:44.5297,lo:10.8615,wiki:"Museo Ferrari"},
+ ghirlandina:{cat:"modena",n:"Torre Ghirlandina beklimmen",d:"Op gezette tijden te beklimmen.",l:"De 86 meter hoge, licht hellende campanile van de Duomo is het symbool van Modena — 'Ghirlandina' naar de sierlijke balustrades. Wie de ruim 200 treden klimt, kijkt tot aan de Apennijnen.",q:"Torre Ghirlandina Modena",la:44.6461,lo:10.9262,wiki:"Ghirlandina"},
+ giusti:{cat:"modena",n:"Salumeria Giusti",d:"Vaak genoemd als oudste delicatessenzaak ter wereld (1605).",l:"Sinds 1605 op dezelfde plek en daarmee vaak de oudste delicatessenzaak ter wereld genoemd. Achter de winkel schuilt Hosteria Giusti: vijf tafeltjes, alleen lunch, en maanden vooruit volgeboekt — de winkel zelf kan altijd.",q:"Salumeria Giusti Modena",la:44.6472,lo:10.9282},
+ pavarotti:{cat:"modena",n:"Casa Museo Luciano Pavarotti",d:"Het woonhuis van de maestro, net buiten Modena.",l:"De villa waar Luciano Pavarotti zijn laatste jaren woonde, opengesteld zoals hij haar achterliet: kostuums, brieven en overal zijn stem door de kamers. Intiem en ontroerend; met de taxi een kwartier vanaf het centrum.",q:"Casa Museo Luciano Pavarotti Modena",la:44.5979,lo:10.9096},
+ ducale:{cat:"modena",n:"Palazzo Ducale Modena",d:"Barokpaleis, nu militaire academie.",l:"Het reusachtige barokpaleis van de hertogen van Este domineert Piazza Roma en huisvest nu de Italiaanse militaire academie. Binnen kom je alleen met een geboekte rondleiding; de gevel en het plein zijn óók zonder al de moeite waard.",q:"Palazzo Ducale Modena",la:44.6487,lo:10.9293,wiki:"Palazzo Ducale (Modena)"},
+ /* — alternatieven — */
+ annamaria:{cat:"alternatief",n:"Trattoria Anna Maria",d:"Backup-diner: instituut voor handgemaakte pasta.",l:"Sinds 1985 een begrip, met muren vol foto's van iedereen die er ooit at. De sfoglia wordt nog dagelijks met de hand gerold; de tagliatelle en lasagne zijn de klassiekers.",q:"Trattoria Anna Maria Bologna",la:44.4976,lo:11.3493},
+ cesari:{cat:"alternatief",n:"Da Cesari",d:"Backup-diner: familiezaak sinds 1955.",l:"Al sinds 1955 in handen van dezelfde familie, met een houten interieur waar de tijd stilstaat. Warme bediening, diepe ragù en een wijnkelder met eigen Sangiovese — zo & ma gesloten.",q:"Ristorante Da Cesari Bologna",la:44.4913,lo:11.3409},
+ bottega:{cat:"alternatief",n:"All'Osteria Bottega",d:"Backup-diner: klein, Emiliaanse topproducten.",l:"Klein, toegewijd en gedreven door liefde voor Emiliaanse producten: culatello, tortellini in brodo, wijnen van kleine makers. Beperkt open (vr–za) en ruim vooraf reserveren is echt nodig.",q:"All'Osteria Bottega Bologna",la:44.4911,lo:11.3327},
+ oltre:{cat:"alternatief",n:"Oltre",d:"Backup-diner: moderne draai aan de Bolognese keuken.",l:"Jong, eigenwijs en in de Michelin-gids: traditionele Bolognese gerechten met een moderne twist, geserveerd in een intiem donker zaaltje met neonkunst. Voor als jullie één avond iets anders willen dan traditie.",q:"Oltre Bologna ristorante",la:44.4969,lo:11.3381},
+ ferrara:{cat:"alternatief",n:"Dagtrip Ferrara (±30 min)",d:"Renaissancestad met kasteel, rustiger dan Modena.",l:"Renaissance-stad van de Este-familie, met een écht kasteel-met-slotgracht midden in het centrum en een fietscultuur als in Nederland. Rustiger en goedkoper dan Bologna; per trein een half uur.",q:"Castello Estense Ferrara",la:44.8375,lo:11.6196,wiki:"Castello Estense"},
+ parma:{cat:"alternatief",n:"Dagtrip Parma (±50 min)",d:"Prosciutto- en Parmigiano-hoofdstad.",l:"De thuisbasis van prosciutto di Parma en Parmigiano Reggiano, met een Duomo-koepel van Correggio die je stil maakt. Culinair de sterkste concurrent van Modena voor jullie dagtrip.",q:"Duomo di Parma",la:44.8034,lo:10.3309,wiki:"Duomo di Parma"},
+ ravenna:{cat:"alternatief",n:"Dagtrip Ravenna (±1 uur)",d:"Byzantijnse mozaïeken (UNESCO).",l:"Ooit hoofdstad van het West-Romeinse Rijk, nu dé plek voor vroeg-Byzantijnse mozaïeken: acht UNESCO-monumenten, met San Vitale en het mausoleum van Galla Placidia als sterren. Totaal iets anders dan al het culinaire.",q:"Basilica di San Vitale Ravenna",la:44.4206,lo:12.1964,wiki:"Basilica di San Vitale"},
+ dozza:{cat:"alternatief",n:"Dagtrip Dozza (±45 min)",d:"Mini-borgo vol muurschilderingen.",l:"Een middeleeuws mini-borgo waar sinds 1960 elke twee jaar kunstenaars de gevels beschilderen — het hele dorp is één openluchtmuseum. In het kasteel zit de regionale enoteca met honderden Emilia-Romagna-wijnen.",q:"Dozza borgo dipinto",la:44.3590,lo:11.6276,wiki:"Dozza"},
+ rocchetta:{cat:"alternatief",n:"Rocchetta Mattei (±50 min)",d:"Sprookjeskasteel in de Apennijnen — alleen weekend, reserveren.",l:"Het fantasiekasteel van graaf Cesare Mattei: een duizelingwekkende mix van Moorse bogen, torentjes en geheime trappen in de Apennijnen. Alleen in het weekend en uitsluitend met reservering te bezoeken.",q:"Rocchetta Mattei",la:44.2238,lo:11.0594,wiki:"Rocchetta Mattei"},
+ brisighella:{cat:"alternatief",n:"Brisighella (±1u15)",d:"Een van de mooiste borghi van de streek.",l:"Officieel een van de mooiste dorpen van Italië: drie rotspunten met een burcht, een klokkentoren en een heiligdom, plus de overdekte ezelstraat Via degli Asini. Beroemd om zijn olijfolie — proef en koop ter plekke.",q:"Brisighella",la:44.2242,lo:11.7737,wiki:"Brisighella"}
+};
+
+const DAGINFO = [
+ {naam:"Venerdì",kort:"Vr",datum:"vrijdag 4 september",verhaal:"Om 20:05 landen jullie op Bologna Airport; de Marconi Express brengt je in 7½ minuut naar het centrum. Koffers naar de Airbnb (4 minuten van het station) en meteen door: de eerste tagliatelle wacht."},
+ {naam:"Sabato",kort:"Za",datum:"zaterdag 5 september",verhaal:"De grote klassieke Bologna-dag: van Piazza Maggiore via het Quadrilatero naar een picknick in een osteria uit 1465, en als kroon op de dag het uitzicht vanaf de klokkentoren en hét diner van de reis."},
+ {naam:"Domenica",kort:"Zo",datum:"zondag 6 september",verhaal:"Vandaag klimt de dag letterlijk: onder 666 bogen omhoog naar San Luca. Daarna verse pasta, een park, en bewust niks moeten — Bologna waardeer je slenterend."},
+ {naam:"Lunedì",kort:"Ma",datum:"maandag 7 september · Modena 🚂",verhaal:"Twintig minuten in de trein en je stapt een andere wereld binnen: die van balsamico, Ghirlandina en gnocco fritto. Vandaag geen ragù — Modena heeft zijn eigen keuken."},
+ {naam:"Martedì",kort:"Di",datum:"dinsdag 8 september",verhaal:"Slow Bologna: de westkant van het centrum, het raampje op het kanaal, misschien zelf pasta leren rollen. En vanavond het afscheidsdiner — alles delen, van salumi tot dessert."},
+ {naam:"Mercoledì",kort:"Wo",datum:"woensdag 9 september",verhaal:"De vlucht vertrekt om 15:10, dus de laatste ochtend is voor koffie, souvenirs en één laatste panino met mortadella. Rond 12:30 koffers ophalen bij de Airbnb, 13:00 de Marconi Express — dan sta je ruim op tijd op BLQ. Arrivederci!"}
+];
+
+const AANBEVOLEN = [
+ [["20:50","centrale"],["21:05","airbnb"],["21:45","orsa"],["23:00","duetorri"],["23:45","airbnb"]],
+ [["09:15","airbnb"],["09:30","maggiore"],["10:00","petronio"],["10:45","archi"],["12:15","quadri"],["12:30","sole"],["14:30","stefano"],["17:30","orologio"],["20:00","serra"],["22:30","airbnb"]],
+ [["08:15","airbnb"],["08:30","sanluca"],["11:45","rina"],["14:00","margherita"],["18:00","pratello"],["21:30","airbnb"]],
+ [["08:35","airbnb"],["08:45","centrale"],["09:15","albinelli"],["10:30","grande"],["14:30","ferrari"],["18:00","centrale"],["18:10","airbnb"]],
+ [["09:15","airbnb"],["09:30","erbe"],["11:00","finestrella"],["11:30","workshop"],["19:30","colombina"],["22:00","airbnb"]],
+ [["08:45","airbnb"],["09:00","souvenirs"],["11:45","panino"],["12:30","airbnb"],["13:00","centrale"]]
+];
+
+/* ================= STATE + OPSLAG ================= */
+const SLEUTEL = "bologna-plan-v1";
+let huidigeDag = 0;
+let uidTeller = 0;
+const maakItem = (tijd,id)=>({tijd,id,uid:"u"+(++uidTeller)});
+const standaard = ()=> AANBEVOLEN.map(d=>d.map(([t,id])=>maakItem(t,id)));
+
+let plan;
+try{
+  const bewaard = JSON.parse(localStorage.getItem(SLEUTEL));
+  if(bewaard && Array.isArray(bewaard.plan) && bewaard.plan.length===6){
+    plan = bewaard.plan.filter(dag=>Array.isArray(dag)).map(dag=>dag.filter(i=>BLOKKEN[i.id]));
+    uidTeller = bewaard.uidTeller||1000;
+  }
+}catch(e){}
+if(!plan) plan = standaard();
+
+function bewaar(){
+  try{ localStorage.setItem(SLEUTEL, JSON.stringify({plan, uidTeller})); }catch(e){}
+}
+
+/* ================= LOOPTIJDEN ================= */
+function afstandKm(a,b){
+  const R=6371, rad=x=>x*Math.PI/180;
+  const dLa=rad(b.la-a.la), dLo=rad(b.lo-a.lo);
+  const h=Math.sin(dLa/2)**2 + Math.cos(rad(a.la))*Math.cos(rad(b.la))*Math.sin(dLo/2)**2;
+  return 2*R*Math.asin(Math.sqrt(h)) * 1.25; // ×1.25 voor het echte stratenpatroon
+}
+function loopInfo(a,b){
+  const km = afstandKm(a,b);
+  if(km<=3.6){
+    const min = Math.max(1,Math.round(km/4.6*60));
+    return {tekst:`🚶 ±${min} min · ${km.toFixed(1).replace('.',',')} km`, km, loop:true};
+  }
+  if(km<=16) return {tekst:`🚌/🚕 ±${Math.round(km)} km`, km, loop:false};
+  return {tekst:`🚆 trein/auto · ±${Math.round(km)} km`, km, loop:false};
+}
+
+/* ================= RENDER: PLANNING ================= */
+const dagKiezer = document.getElementById("dagKiezer");
+dagKiezer.innerHTML = DAGINFO.map((d,i)=>`<button data-dag="${i}" class="${i===0?'aan':''}">${d.kort} · ${d.naam}</button>`).join("");
+
+const tijdlijn = document.getElementById("tijdlijn");
+const toast = document.getElementById("toast");
+let toastTimer;
+function melding(txt){
+  toast.textContent = txt;
+  toast.classList.add("zien");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(()=>toast.classList.remove("zien"),1800);
+}
+
+function renderDag(){
+  const info = DAGINFO[huidigeDag];
+  document.getElementById("dagNaam").textContent = info.naam;
+  document.getElementById("dagDatum").textContent = info.datum;
+  document.getElementById("doelDag").textContent = info.naam + " — " + info.datum;
+  dagKiezer.querySelectorAll("button").forEach(b=>b.classList.toggle("aan",+b.dataset.dag===huidigeDag));
+
+  const items = plan[huidigeDag];
+  if(!items.length){
+    tijdlijn.innerHTML = `<p class="leeg">Nog leeg — sleep bouwstenen hierheen of gebruik ➕ Bouwstenen.</p>`;
+  }else{
+    tijdlijn.innerHTML = items.map((it,i)=>{
+      const b = BLOKKEN[it.id];
+      const loop = i>0 ? `<div class="loopje">${loopInfo(BLOKKEN[items[i-1].id],b).tekst}</div>` : "";
+      return loop+`<div class="item" draggable="true" data-uid="${it.uid}">
+        <span class="grip" aria-hidden="true">⠿</span>
+        <input class="tijd" type="time" value="${it.tijd}" aria-label="Tijd voor ${b.n}">
+        <div class="info">
+          <h3>${b.n}</h3>
+          <span class="sub">${b.d}</span><br>
+          <a href="${M(b.q)}" target="_blank" rel="noopener">📍 Maps</a>${b.w?`<a href="${b.w}" target="_blank" rel="noopener">🌐 Website</a>`:""}
+        </div>
+        <div class="ops">
+          <button class="op" title="Omhoog" aria-label="Omhoog">↑</button>
+          <button class="neer" title="Omlaag" aria-label="Omlaag">↓</button>
+          <button class="weg" title="Verwijderen" aria-label="Verwijderen">✕</button>
+        </div>
+      </div>`;
+    }).join("");
+  }
+  markeerGeplaatst();
+  bewaar();
+}
+
+function sorteerOpTijd(){ plan[huidigeDag].sort((a,b)=>a.tijd.localeCompare(b.tijd)); }
+
+/* ================= RENDER: BOUWSTENEN ================= */
+const blokLijst = document.getElementById("blokLijst");
+const CATS = {aanbevolen:"⭐ aanbevolen",eten:"🍝 eten & drinken",pizza:"🍕 pizza & aperitivo",gelato:"🍨 gelato & koffie",cultuur:"🏛️ cultuur",plek:"🌿 plekje",modena:"🚂 Modena",alternatief:"🔄 alternatief"};
+const CAT_EMOJI = {aanbevolen:"⭐",eten:"🍝",pizza:"🍕",gelato:"🍨",cultuur:"🏛️",plek:"🌿",modena:"🚂",alternatief:"🔄"};
+blokLijst.innerHTML = Object.entries(BLOKKEN).map(([id,b])=>`
+  <div class="blok" draggable="true" data-id="${id}" data-c="${b.cat}">
+    <span class="grip" aria-hidden="true">⠿</span>
+    <div>
+      <span class="cat">${CATS[b.cat]}</span>
+      <h3>${b.n}</h3>
+      <p>${b.d}</p>
+      <a href="${M(b.q)}" target="_blank" rel="noopener">📍 Maps</a>${b.w?` <a href="${b.w}" target="_blank" rel="noopener">🌐 Website</a>`:""}
+    </div>
+    <button class="plus" data-id="${id}">＋ Dag</button>
+  </div>`).join("");
+
+function markeerGeplaatst(){
+  const inDag = new Set(plan[huidigeDag].map(i=>i.id));
+  blokLijst.querySelectorAll(".blok").forEach(bl=>{
+    const zit = inDag.has(bl.dataset.id);
+    bl.classList.toggle("geplaatst",zit);
+    bl.querySelector(".plus").textContent = zit ? "✓ In dag" : "＋ Dag";
+  });
+}
+
+/* ================= RENDER: REISBLOG ================= */
+const blogDagKiezer = document.getElementById("blogDagKiezer");
+blogDagKiezer.innerHTML = DAGINFO.map((d,i)=>`<button data-dag="${i}" class="${i===0?'aan':''}">${d.kort} · ${d.naam}</button>`).join("");
+const blogInhoud = document.getElementById("blogInhoud");
+let blogKaart = null;
+const FOTO_CACHE = {};
+
+async function haalFoto(id){
+  if(id in FOTO_CACHE) return FOTO_CACHE[id];
+  const b = BLOKKEN[id];
+  let url = null;
+  /* 1. Wikipedia-hoofdfoto van het artikel (action API met origin=* voor betrouwbare CORS) */
+  if(b.wiki){
+    try{
+      const r = await fetch("https://it.wikipedia.org/w/api.php?action=query&format=json&origin=*&redirects=1&prop=pageimages&piprop=thumbnail&pithumbsize=800&titles="+encodeURIComponent(b.wiki));
+      const j = await r.json();
+      const pages = j.query && j.query.pages;
+      if(pages){
+        const p = Object.values(pages)[0];
+        if(p && p.thumbnail && p.thumbnail.source) url = p.thumbnail.source;
+      }
+    }catch(e){}
+  }
+  /* 2. Geen artikel-foto? Zoek op Wikimedia Commons naar foto's gemaakt op deze plek (geosearch op coördinaten) */
+  if(!url && b.la){
+    try{
+      const r = await fetch("https://commons.wikimedia.org/w/api.php?action=query&format=json&origin=*&generator=geosearch&ggscoord="+b.la+"%7C"+b.lo+"&ggsradius=180&ggslimit=8&ggsnamespace=6&prop=imageinfo&iiprop=url%7Cmime&iiurlwidth=800");
+      const j = await r.json();
+      const pages = j.query && j.query.pages;
+      if(pages){
+        const kandidaten = Object.values(pages).filter(p=>{
+          const ii = p.imageinfo && p.imageinfo[0];
+          return ii && /image\/(jpeg|png)/.test(ii.mime||"") && !/\.(svg|pdf|tif)/i.test(ii.url||"");
+        });
+        if(kandidaten.length){
+          const ii = kandidaten[0].imageinfo[0];
+          url = ii.thumburl || ii.url;
+        }
+      }
+    }catch(e){}
+  }
+  FOTO_CACHE[id] = url;
+  return url;
+}
+
+function renderBlog(){
+  blogDagKiezer.querySelectorAll("button").forEach(b=>b.classList.toggle("aan",+b.dataset.dag===huidigeDag));
+  const info = DAGINFO[huidigeDag];
+  const items = plan[huidigeDag];
+
+  if(!items.length){
+    blogInhoud.innerHTML = `<div class="blog-kop"><h3>${info.naam}</h3><span class="datum">${info.datum}</span></div>
+      <p class="blog-leeg">Deze dag is nog leeg — stel hem samen in 📅 Planning, dan verschijnt hier je reisblog.</p>`;
+    return;
+  }
+
+  // statistieken
+  let totKm=0, totMin=0, benen=[];
+  for(let i=1;i<items.length;i++){
+    const li = loopInfo(BLOKKEN[items[i-1].id],BLOKKEN[items[i].id]);
+    benen.push(li);
+    if(li.loop){ totKm+=li.km; totMin+=li.km/4.6*60; }
+  }
+  const stats = totKm>0 ? `<span>🚶 totaal ±${totKm.toFixed(1).replace('.',',')} km · ${Math.round(totMin)} min lopen</span>` : "";
+
+  blogInhoud.innerHTML = `
+    <div class="blog-kop">
+      <h3>${info.naam}</h3>
+      <span class="datum">${info.datum}</span>
+      <p class="verhaal">${info.verhaal}</p>
+    </div>
+    <div class="blog-stats"><span>📍 ${items.length} stops</span>${stats}</div>
+    <div id="blogKaart"></div>
+    ${items.map((it,i)=>{
+      const b = BLOKKEN[it.id];
+      const loop = i>0 ? `<div class="bloop">${benen[i-1].tekst}</div>` : "";
+      return loop+`<article class="bstop" data-id="${it.id}">
+        <div class="foto-slot"><div class="foto-fallback">${CAT_EMOJI[b.cat]||"📍"}</div></div>
+        <div class="tekst">
+          <div class="regel"><span class="nr">${i+1}</span><span class="tijd">${it.tijd}</span><h4>${b.n}</h4></div>
+          <p class="lang">${b.l}</p>
+          <div class="knoppen">
+            <a href="${M(b.q)}" target="_blank" rel="noopener">📍 Open in Maps</a>
+            ${b.w?`<a href="${b.w}" target="_blank" rel="noopener">🌐 Website</a>`:""}
+          </div>
+        </div>
+      </article>`;
+    }).join("")}`;
+
+  // kaart
+  if(blogKaart){ blogKaart.remove(); blogKaart=null; }
+  if(typeof L !== "undefined"){
+    blogKaart = L.map("blogKaart",{scrollWheelZoom:false});
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{attribution:"&copy; OpenStreetMap",maxZoom:19}).addTo(blogKaart);
+    const punten = items.map(it=>[BLOKKEN[it.id].la,BLOKKEN[it.id].lo]);
+    items.forEach((it,i)=>{
+      L.marker(punten[i],{icon:L.divIcon({className:"",html:`<div class="bmarker">${i+1}</div>`,iconSize:[26,26],iconAnchor:[13,13]})})
+        .addTo(blogKaart).bindPopup(`<b>${it.tijd}</b> ${BLOKKEN[it.id].n}`);
+    });
+    if(punten.length>1) L.polyline(punten,{color:"#8C2318",weight:3,dashArray:"6 8",opacity:.8}).addTo(blogKaart);
+    blogKaart.fitBounds(L.latLngBounds(punten).pad(0.15));
+  }
+
+  // foto's asynchroon laden
+  blogInhoud.querySelectorAll(".bstop").forEach(async el=>{
+    const url = await haalFoto(el.dataset.id);
+    if(url){
+      const img = new Image();
+      img.className="foto";
+      img.alt = BLOKKEN[el.dataset.id].n;
+      img.loading="lazy";
+      img.referrerPolicy="no-referrer";
+      img.onload = ()=>{ const slot=el.querySelector(".foto-slot"); if(slot){ slot.innerHTML=""; slot.appendChild(img); } };
+      img.src = url;
+    }
+  });
+}
+
+/* ================= INTERACTIE ================= */
+function toonTab(naam){
+  document.querySelectorAll("nav [role=tab]").forEach(x=>x.setAttribute("aria-selected",x.dataset.tab===naam));
+  document.querySelectorAll(".paneel").forEach(p=>p.classList.toggle("actief",p.id===naam));
+  if(naam==="blog") renderBlog();
+  window.scrollTo({top:0});
+}
+document.querySelectorAll("nav [role=tab]").forEach(b=>b.addEventListener("click",()=>toonTab(b.dataset.tab)));
+document.getElementById("naarStenen").addEventListener("click",()=>toonTab("stenen"));
+document.getElementById("naarBlog").addEventListener("click",()=>toonTab("blog"));
+
+dagKiezer.addEventListener("click",e=>{
+  const b = e.target.closest("button");
+  if(!b) return;
+  huidigeDag = +b.dataset.dag;
+  renderDag();
+});
+blogDagKiezer.addEventListener("click",e=>{
+  const b = e.target.closest("button");
+  if(!b) return;
+  huidigeDag = +b.dataset.dag;
+  renderDag();
+  renderBlog();
+});
+
+document.getElementById("herstelDag").addEventListener("click",()=>{
+  plan[huidigeDag] = AANBEVOLEN[huidigeDag].map(([t,id])=>maakItem(t,id));
+  renderDag();
+  melding("Aanbevolen planning hersteld");
+});
+document.getElementById("leegDag").addEventListener("click",()=>{
+  plan[huidigeDag] = [];
+  renderDag();
+  melding("Dag leeggemaakt");
+});
+document.getElementById("resetAlles").addEventListener("click",()=>{
+  if(!confirm("Hele reis terugzetten naar de aanbevolen planning?")) return;
+  plan = standaard();
+  renderDag();
+  melding("Hele reis hersteld");
+});
+
+document.getElementById("routeDag").addEventListener("click",()=>{
+  const stops = plan[huidigeDag].map(it=>BLOKKEN[it.id].q);
+  if(!stops.length){ melding("Deze dag is nog leeg"); return; }
+  if(stops.length===1){ window.open(M(stops[0]),"_blank","noopener"); return; }
+  let route = stops;
+  if(stops.length>10){ route = stops.slice(0,10); melding("Meer dan 10 stops — route toont de eerste 10"); }
+  const origin = encodeURIComponent(route[0]);
+  const destination = encodeURIComponent(route[route.length-1]);
+  const waypoints = route.slice(1,-1).map(encodeURIComponent).join("%7C");
+  let url = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}&travelmode=walking`;
+  if(waypoints) url += `&waypoints=${waypoints}`;
+  window.open(url,"_blank","noopener");
+});
+
+tijdlijn.addEventListener("change",e=>{
+  if(!e.target.classList.contains("tijd")) return;
+  const uid = e.target.closest(".item").dataset.uid;
+  const it = plan[huidigeDag].find(i=>i.uid===uid);
+  if(it && e.target.value){ it.tijd = e.target.value; sorteerOpTijd(); renderDag(); }
+});
+tijdlijn.addEventListener("click",e=>{
+  const item = e.target.closest(".item");
+  if(!item) return;
+  const arr = plan[huidigeDag];
+  const idx = arr.findIndex(i=>i.uid===item.dataset.uid);
+  if(e.target.classList.contains("weg")){ arr.splice(idx,1); renderDag(); }
+  if(e.target.classList.contains("op") && idx>0){ [arr[idx-1],arr[idx]]=[arr[idx],arr[idx-1]]; renderDag(); }
+  if(e.target.classList.contains("neer") && idx<arr.length-1){ [arr[idx+1],arr[idx]]=[arr[idx],arr[idx+1]]; renderDag(); }
+});
+
+blokLijst.addEventListener("click",e=>{
+  const p = e.target.closest(".plus");
+  if(!p) return;
+  voegToe(p.dataset.id);
+});
+function volgendeTijd(){
+  const arr = plan[huidigeDag];
+  if(!arr.length) return "09:00";
+  let [u,m] = arr[arr.length-1].tijd.split(":").map(Number);
+  u = Math.min(u+1,23);
+  return String(u).padStart(2,"0")+":"+String(m).padStart(2,"0");
+}
+function voegToe(id, tijd){
+  plan[huidigeDag].push(maakItem(tijd||volgendeTijd(),id));
+  if(tijd) sorteerOpTijd();
+  renderDag();
+  melding("Toegevoegd aan "+DAGINFO[huidigeDag].naam+" ✓");
+}
+
+document.querySelectorAll("#stFilters button").forEach(b=>{
+  b.addEventListener("click",()=>{
+    document.querySelectorAll("#stFilters button").forEach(x=>x.classList.remove("aan"));
+    b.classList.add("aan");
+    const f = b.dataset.f;
+    blokLijst.querySelectorAll(".blok").forEach(bl=>bl.classList.toggle("verborgen", f!=="alles" && bl.dataset.c!==f));
+  });
+});
+
+/* drag & drop (desktop) */
+let sleepUid = null, sleepBlok = null;
+tijdlijn.addEventListener("dragstart",e=>{
+  const it = e.target.closest(".item");
+  if(!it) return;
+  sleepUid = it.dataset.uid;
+  it.classList.add("sleept");
+  e.dataTransfer.effectAllowed = "move";
+});
+tijdlijn.addEventListener("dragend",e=>{
+  e.target.closest(".item")?.classList.remove("sleept");
+  tijdlijn.querySelectorAll(".item").forEach(i=>i.classList.remove("boven"));
+  sleepUid = null;
+});
+blokLijst.addEventListener("dragstart",e=>{
+  const bl = e.target.closest(".blok");
+  if(!bl) return;
+  sleepBlok = bl.dataset.id;
+  bl.classList.add("sleept");
+  e.dataTransfer.effectAllowed = "copy";
+});
+blokLijst.addEventListener("dragend",e=>{
+  e.target.closest(".blok")?.classList.remove("sleept");
+  sleepBlok = null;
+});
+tijdlijn.addEventListener("dragover",e=>{
+  e.preventDefault();
+  tijdlijn.classList.add("drop");
+  const over = e.target.closest(".item");
+  tijdlijn.querySelectorAll(".item").forEach(i=>i.classList.toggle("boven", i===over));
+});
+tijdlijn.addEventListener("dragleave",e=>{ if(e.target===tijdlijn) tijdlijn.classList.remove("drop"); });
+tijdlijn.addEventListener("drop",e=>{
+  e.preventDefault();
+  tijdlijn.classList.remove("drop");
+  const arr = plan[huidigeDag];
+  const over = e.target.closest(".item");
+  const doelIdx = over ? arr.findIndex(i=>i.uid===over.dataset.uid) : arr.length;
+  if(sleepUid){
+    const vanIdx = arr.findIndex(i=>i.uid===sleepUid);
+    const [it] = arr.splice(vanIdx,1);
+    arr.splice(vanIdx<doelIdx?doelIdx-1:doelIdx,0,it);
+    renderDag();
+  }else if(sleepBlok){
+    const buurTijd = over ? arr[doelIdx]?.tijd : null;
+    arr.splice(doelIdx,0,maakItem(buurTijd||volgendeTijd(),sleepBlok));
+    renderDag();
+    melding("Toegevoegd ✓");
+  }
+  sleepUid = sleepBlok = null;
+});
+
+renderDag();
+
+/* PWA */
+if("serviceWorker" in navigator){
+  window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));
+}
+</script>
+</body>
+</html>

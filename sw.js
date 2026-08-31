@@ -1,4 +1,4 @@
-const CACHE = "bologna-v3";
+const CACHE = "bologna-v5";
 const KERN = ["./", "index.html", "manifest.webmanifest", "icon.svg"];
 
 self.addEventListener("install", e => {
