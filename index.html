@@ -188,7 +188,7 @@
 </main>
 
 <div class="toast" id="toast"></div>
-<footer>Buon viaggio! 🍷</footer>
+<footer>Buon viaggio! 🍷 <span style="opacity:.5;font-size:.8rem">· app-versie 6</span></footer>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
@@ -426,7 +426,7 @@ async function haalFoto(id){
   if(id in FOTO_CACHE) return FOTO_CACHE[id];
   const b = BLOKKEN[id];
   let url = null;
-  /* 1. Wikipedia-hoofdfoto van het artikel (action API met origin=* voor betrouwbare CORS) */
+  /* 1. Wikipedia-hoofdfoto via action API (origin=* voor CORS) */
   if(b.wiki){
     try{
       const r = await fetch("https://it.wikipedia.org/w/api.php?action=query&format=json&origin=*&redirects=1&prop=pageimages&piprop=thumbnail&pithumbsize=800&titles="+encodeURIComponent(b.wiki));
@@ -436,9 +436,19 @@ async function haalFoto(id){
         const p = Object.values(pages)[0];
         if(p && p.thumbnail && p.thumbnail.source) url = p.thumbnail.source;
       }
-    }catch(e){}
+    }catch(e){ console.warn("foto actionAPI faalde",id,e); }
   }
-  /* 2. Geen artikel-foto? Zoek op Wikimedia Commons naar foto's gemaakt op deze plek (geosearch op coördinaten) */
+  /* 1b. Zelfde artikel via REST-API als backup */
+  if(!url && b.wiki){
+    try{
+      const r = await fetch("https://it.wikipedia.org/api/rest_v1/page/summary/"+encodeURIComponent(b.wiki.replace(/ /g,"_")));
+      if(r.ok){
+        const j = await r.json();
+        if(j.thumbnail && j.thumbnail.source) url = j.thumbnail.source;
+      }
+    }catch(e){ console.warn("foto REST faalde",id,e); }
+  }
+  /* 2. Geen artikel-foto? Commons-geosearch: foto's gemaakt op deze coördinaten */
   if(!url && b.la){
     try{
       const r = await fetch("https://commons.wikimedia.org/w/api.php?action=query&format=json&origin=*&generator=geosearch&ggscoord="+b.la+"%7C"+b.lo+"&ggsradius=180&ggslimit=8&ggsnamespace=6&prop=imageinfo&iiprop=url%7Cmime&iiurlwidth=800");
@@ -454,7 +464,7 @@ async function haalFoto(id){
           url = ii.thumburl || ii.url;
         }
       }
-    }catch(e){}
+    }catch(e){ console.warn("foto geosearch faalde",id,e); }
   }
   FOTO_CACHE[id] = url;
   return url;

@@ -1,4 +1,4 @@
-const CACHE = "bologna-v5";
+const CACHE = "bologna-v6";
 const KERN = ["./", "index.html", "manifest.webmanifest", "icon.svg"];
 
 self.addEventListener("install", e => {
@@ -10,15 +10,15 @@ self.addEventListener("activate", e => {
       .then(() => self.clients.claim())
   );
 });
-// Netwerk eerst voor de eigen pagina (zodat updates binnenkomen), cache als fallback (offline).
+// ALLEEN eigen bestanden afhandelen; extern verkeer (Wikipedia, kaarttegels, fonts)
+// volledig met rust laten — de service worker mag daar nooit tussen zitten.
 self.addEventListener("fetch", e => {
   if (e.request.method !== "GET") return;
+  if (new URL(e.request.url).origin !== location.origin) return;
   e.respondWith(
     fetch(e.request).then(r => {
-      if (new URL(e.request.url).origin === location.origin) {
-        const kopie = r.clone();
-        caches.open(CACHE).then(c => c.put(e.request, kopie));
-      }
+      const kopie = r.clone();
+      caches.open(CACHE).then(c => c.put(e.request, kopie));
       return r;
     }).catch(() => caches.match(e.request, { ignoreSearch: true }))
   );
